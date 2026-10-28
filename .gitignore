@@ -1,0 +1,12 @@
+# 构建产物
+build/
+*.o
+*.exe
+*.apk
+*.idsig
+
+# 依赖与缓存
+.gradle/
+*.keystore
+*.jks
+local.properties

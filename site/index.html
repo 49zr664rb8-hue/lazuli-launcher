@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>琉璃启动器 · Lazuli Launcher</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{
+    font-family:"Microsoft YaHei","PingFang SC",-apple-system,sans-serif;
+    background:#0B1017;
+    background-image:
+      radial-gradient(900px 600px at 12% 85%, rgba(40,200,120,.16), transparent 60%),
+      radial-gradient(800px 500px at 88% 10%, rgba(70,120,255,.12), transparent 60%),
+      linear-gradient(180deg,#0B1017,#151C28);
+    color:#E8EEF6;min-height:100vh;
+    display:flex;align-items:center;justify-content:center;padding:40px 20px;
+  }
+  .wrap{width:100%;max-width:920px}
+
+  /* 头部 */
+  .head{display:flex;align-items:center;gap:18px;margin-bottom:14px}
+  .logo{
+    width:72px;height:72px;border-radius:20px;flex:none;
+    background:linear-gradient(180deg,#1A2230,#0E141E);
+    border:1px solid rgba(255,255,255,.14);
+    box-shadow:0 10px 30px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.12);
+    display:flex;align-items:center;justify-content:center;
+    font-size:38px;font-weight:700;color:#3DDC84;
+    text-shadow:0 0 24px rgba(61,220,132,.6);
+  }
+  h1{font-size:34px;letter-spacing:.5px}
+  .sub{color:#687485;font-size:13px;margin-top:6px;letter-spacing:1.5px}
+
+  /* 简介 */
+  .intro{
+    margin:26px 0;padding:22px 24px;border-radius:20px;
+    background:rgba(255,255,255,.07);
+    border:1px solid rgba(255,255,255,.10);
+    box-shadow:0 12px 40px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.10);
+    color:#9AA7B8;font-size:14.5px;line-height:1.9;
+  }
+  .intro b{color:#E8EEF6;font-weight:600}
+
+  /* 下载卡 */
+  .cards{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  @media(max-width:640px){.cards{grid-template-columns:1fr}h1{font-size:26px}}
+
+  .card{
+    position:relative;border-radius:22px;padding:26px 24px;overflow:hidden;
+    background:rgba(255,255,255,.07);
+    border:1px solid rgba(255,255,255,.12);
+    box-shadow:0 16px 44px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.14);
+  }
+  .card::before{
+    content:"";position:absolute;inset:0 0 auto 0;height:52%;
+    background:linear-gradient(180deg,rgba(255,255,255,.10),rgba(255,255,255,0));
+    pointer-events:none;
+  }
+  .tag{
+    display:inline-block;font-size:11px;letter-spacing:1px;
+    color:#3DDC84;border:1px solid rgba(61,220,132,.35);
+    background:rgba(61,220,132,.10);
+    padding:3px 10px;border-radius:99px;margin-bottom:12px;
+  }
+  .card h2{font-size:19px;margin-bottom:6px}
+  .card p{color:#9AA7B8;font-size:12.5px;line-height:1.8;margin-bottom:18px}
+  .meta{color:#687485;font-size:11px;margin-bottom:16px;letter-spacing:.3px}
+
+  .btn{
+    display:flex;align-items:center;justify-content:center;gap:8px;
+    width:100%;padding:15px;border-radius:99px;
+    font-size:15px;font-weight:700;text-decoration:none;
+    color:#062014;
+    background:linear-gradient(180deg,#6EE7A8,#3DDC84 55%,#2BB86E);
+    box-shadow:0 8px 24px rgba(61,220,132,.35), inset 0 1px 0 rgba(255,255,255,.45);
+    transition:transform .12s, box-shadow .12s;
+  }
+  .btn:hover{transform:translateY(-2px);box-shadow:0 12px 30px rgba(61,220,132,.45), inset 0 1px 0 rgba(255,255,255,.5)}
+  .btn.ghost{
+    color:#E8EEF6;background:rgba(255,255,255,.09);
+    border:1px solid rgba(255,255,255,.16);
+    box-shadow:0 8px 24px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.10);
+  }
+  .btn.ghost:hover{background:rgba(255,255,255,.14)}
+
+  footer{
+    margin-top:30px;text-align:center;color:#687485;font-size:11.5px;line-height:2;
+  }
+  footer a{color:#3DDC84;text-decoration:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="head">
+    <div class="logo">琉</div>
+    <div>
+      <h1>琉璃启动器</h1>
+      <div class="sub">LAZULI LAUNCHER</div>
+    </div>
+  </div>
+
+  <div class="intro">
+    <b>琉璃启动器</b>是一款 Minecraft Java 版启动器，支持 <b>Windows 桌面</b>与 <b>Android 手机</b>两个平台。<br>
+    内置微软正版登录与离线登录、版本管理、模组下载、Fabric 加载器一键安装、皮肤预览。<br>
+    手机版内置 JRE 与图形转译层，可在安卓设备上直接运行 Java 版游戏。
+  </div>
+
+  <div class="cards">
+
+    <div class="card">
+      <span class="tag">ANDROID</span>
+      <h2>Lazuli Launcher Mobile</h2>
+      <p>支持 Android 7.0 及以上，全架构（arm64 / armv7 / x86 / x86_64）。<br>自带运行时，无需另装 Java。</p>
+      <div class="meta">APK · 约 314 MB</div>
+      <a class="btn" href="downloads/Lazuli Launcher Mobile.apk" download>⬇ 下载手机版</a>
+    </div>
+
+    <div class="card">
+      <span class="tag">WINDOWS</span>
+      <h2>Lazuli Launcher</h2>
+      <p>Windows 10 / 11，64 位。原生 Win32 应用，体积小、启动快。<br>支持 Forge / NeoForge / Fabric 安装与联机。</p>
+      <div class="meta">EXE · 约 0.4 MB</div>
+      <a class="btn ghost" href="downloads/Lazuli Launcher Setup.exe" download>⬇ 下载电脑版</a>
+    </div>
+
+  </div>
+
+  <footer>
+    本启动器使用了部分 FCL（Fold Craft Launcher）的代码，遵循 GNU General Public License v3.0。<br>
+    非官方产品，与 Mojang Studios、Microsoft 无隶属关系。
+  </footer>
+
+</div>
+</body>
+</html>
