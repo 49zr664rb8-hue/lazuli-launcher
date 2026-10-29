@@ -4,6 +4,7 @@
 
 #include "common.h"
 #include "net.h"
+#include <time.h>
 
 #define MAX_VERSIONS 2048
 #define MAX_CONTENT  40
@@ -26,6 +27,7 @@ typedef struct {
     char uuid[40];
     char token[4096];
     char refresh[2048];
+    long long refreshed_at;   /* 上次刷新令牌的 unix 时间 */
     char xuid[64];
     char device_code[1200];
     char user_code[32];

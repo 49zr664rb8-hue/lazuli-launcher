@@ -1331,7 +1331,10 @@ static DWORD WINAPI launch_thread(LPVOID p) {
 
     /* 微软令牌只有 24 小时有效期，启动前刷新一次。
        否则过期后游戏里会提示「无效的会话 ID」，联机也用不了。 */
-    if (g.auth.refresh[0]) {
+    /* 6 小时内刷新过就跳过，避免每次启动都多等一两秒 */
+    int need_refresh = g.auth.refresh[0] &&
+        (g.auth.refreshed_at == 0 || (long long)time(NULL) - g.auth.refreshed_at > 6 * 3600);
+    if (need_refresh) {
         EnterCriticalSection(&g_lock);
         snprintf(g.status, sizeof(g.status), "正在刷新登录令牌…");
         LeaveCriticalSection(&g_lock);

@@ -428,6 +428,7 @@ int auth_refresh_blocking(char *err, size_t errcap) {
     snprintf(uuid, sizeof(uuid), "%s", uid);
     json_free(pj);
 
+    g.auth.refreshed_at = (long long)time(NULL);
     auth_succeed(name, uuid, mc_tok, xuid_s);
     app_log("[登录] 令牌已刷新：%s", name);
     return 1;
@@ -482,6 +483,7 @@ void auth_save(void) {
     sb_printf(&b, "token=%s\n", g.auth.token);
     sb_printf(&b, "xuid=%s\n", g.auth.xuid);
     sb_printf(&b, "refresh=%s\n", g.auth.refresh);
+    sb_printf(&b, "refreshed_at=%lld\n", g.auth.refreshed_at);
     lz_file_write(p, b.s ? b.s : "", b.n);
     sb_free(&b);
 }
@@ -501,6 +503,7 @@ void auth_load(void) {
         else if (!strcmp(k, "uuid")) snprintf(g.auth.uuid, sizeof(g.auth.uuid), "%s", v);
         else if (!strcmp(k, "token")) snprintf(g.auth.token, sizeof(g.auth.token), "%s", v);
         else if (!strcmp(k, "refresh")) snprintf(g.auth.refresh, sizeof(g.auth.refresh), "%s", v);
+        else if (!strcmp(k, "refreshed_at")) g.auth.refreshed_at = atoll(v);
         else if (!strcmp(k, "xuid")) snprintf(g.auth.xuid, sizeof(g.auth.xuid), "%s", v);
     }
     free(txt);
