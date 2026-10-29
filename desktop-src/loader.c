@@ -248,11 +248,26 @@ int loader_install_sync(const char *mc, int kind, const char *lver, char *err, s
             snprintf(err, errcap, "需要 Java 才能安装 %s", loader_name(kind));
             return 0;
         }
-        /* 安装器要求存在 launcher_profiles.json */
+        /* 安装器要求存在 launcher_profiles.json，且必须是合法 JSON。
+           注意长度要用 strlen，不能把结尾的 \0 也写进去——Forge 用 Gson 解析，
+           末尾多一个 NUL 就会报 "A problem installing was detected"。 */
         char lp[MAX_PATH * 2];
         lz_path_join(lp, sizeof(lp), gd, "launcher_profiles.json");
-        if (!lz_file_exists(lp))
-            lz_file_write(lp, "{\"profiles\":{},\"settings\":{},\"version\":3}", 42);
+        const char *stub = "{\"profiles\":{},\"settings\":{\"enableSnapshots\":false,"
+                           "\"keepLauncherOpen\":false},\"version\":3}";
+        int need_write = 1;
+        char *old = NULL;
+        if (lz_file_read(lp, &old, NULL)) {
+            size_t len = old ? strlen(old) : 0;
+            long long fsz = lz_file_size(lp);
+            /* 文件大小和 strlen 对不上 = 末尾有多余字节（比如被写进了 \0）；
+               或者结尾不是 } / 缺 profiles 字段，都当作坏文件重写 */
+            if (fsz == (long long)len && len > 2 && old[len - 1] == '}' &&
+                strstr(old, "\"profiles\""))
+                need_write = 0;
+            free(old);
+        }
+        if (need_write) lz_file_write(lp, stub, strlen(stub));
 
         char inst_url[600];
         if (kind == LD_FORGE)
