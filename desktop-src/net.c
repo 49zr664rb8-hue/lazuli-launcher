@@ -468,6 +468,23 @@ static void dl_set_err(DlTask *t, const char *msg) {
     if (t->on_change) t->on_change();
 }
 
+/* 单线程整体下载；分块失败时也用它兜底 */
+static void dl_single(DlTask *t) {
+    HANDLE f = CreateFileA(t->path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
+                           FILE_ATTRIBUTE_NORMAL, NULL);
+    if (f == INVALID_HANDLE_VALUE) { dl_set_err(t, "无法写入文件"); return; }
+    DlWr w; w.t = t; w.f = f; w.err = 0;
+    HttpInfo info;
+    InterlockedExchange64(&t->got, 0);
+    t->state = 1;
+    int r = http_do("GET", t->url, NULL, 0, NULL, 0, dl_wr, &w, &info);
+    CloseHandle(f);
+    if (t->cancel) { t->state = 4; }
+    else if (r && !w.err && info.status >= 200 && info.status < 300) t->state = 2;
+    else dl_set_err(t, "下载失败");
+    if (t->on_change) t->on_change();
+}
+
 static DWORD WINAPI dl_controller(LPVOID p) {
     DlTask *t = (DlTask *)p;
     long long size = -1;
@@ -487,18 +504,7 @@ static DWORD WINAPI dl_controller(LPVOID p) {
     if (!ranges || size < (2LL << 20) || n < 2) n = 1;
 
     if (n == 1) {
-        HANDLE f = CreateFileA(t->path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
-                               FILE_ATTRIBUTE_NORMAL, NULL);
-        if (f == INVALID_HANDLE_VALUE) { dl_set_err(t, "无法写入文件"); return 0; }
-        DlWr w; w.t = t; w.f = f; w.err = 0;
-        HttpInfo info;
-        t->state = 1;
-        int r = http_do("GET", t->url, NULL, 0, NULL, 0, dl_wr, &w, &info);
-        CloseHandle(f);
-        if (t->cancel) { t->state = 4; }
-        else if (r && !w.err && info.status >= 200 && info.status < 300) t->state = 2;
-        else dl_set_err(t, "下载失败");
-        if (t->on_change) t->on_change();
+        dl_single(t);
         return 0;
     }
 
@@ -542,8 +548,27 @@ static DWORD WINAPI dl_controller(LPVOID p) {
     for (int i = 0; i < spawned; i++) CloseHandle(th[i]);
 
     if (t->state != 4) {
-        if (t->got >= size) t->state = 2;
-        else dl_set_err(t, "分块下载未完成");
+        /* 以磁盘上的实际大小为准：服务器忽略 Range 时每块都会写整个文件，
+           只比 got 会误判成功，必须核对文件大小 */
+        long long onDisk = -1;
+        HANDLE hf = CreateFileA(t->path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+        if (hf != INVALID_HANDLE_VALUE) {
+            LARGE_INTEGER fs;
+            if (GetFileSizeEx(hf, &fs)) onDisk = (long long)fs.QuadPart;
+            CloseHandle(hf);
+        }
+        if (onDisk == size) {
+            t->got = size;
+            t->state = 2;
+        } else {
+            /* 分块不靠谱：清掉重下，改用单线程 */
+            DeleteFileA(t->path);
+            t->speed = 0;
+            if (t->on_change) t->on_change();
+            dl_single(t);
+            return 0;
+        }
     }
     t->speed = 0;
     if (t->on_change) t->on_change();

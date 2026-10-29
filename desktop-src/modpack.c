@@ -11,11 +11,46 @@ static void mp_dir(char *out, size_t cap) {
     lz_dir_make(out);
 }
 
-/* 用系统 tar 解压（zip / tar.gz 都吃） */
+/* 找 tar.exe：32 位进程在 64 位系统上 System32 会被重定向到 SysWOW64（没有 tar），
+   所以先试 Sysnative，再试 System32，最后退回 PATH */
+static int find_tar(char *out, size_t cap) {
+    char win[MAX_PATH];
+    if (GetWindowsDirectoryA(win, sizeof(win))) {
+        const char *sub[] = { "\\Sysnative\\tar.exe", "\\System32\\tar.exe" };
+        for (int i = 0; i < 2; i++) {
+            snprintf(out, cap, "%s%s", win, sub[i]);
+            if (GetFileAttributesA(out) != INVALID_FILE_ATTRIBUTES) return 1;
+        }
+    }
+    snprintf(out, cap, "tar.exe");
+    return 0;
+}
+
+static int run_hidden(const char *cmdline, DWORD timeout_ms) {
+    STARTUPINFOA si;
+    PROCESS_INFORMATION pi;
+    memset(&si, 0, sizeof(si));
+    si.cb = sizeof(si);
+    si.dwFlags = STARTF_USESHOWWINDOW;
+    si.wShowWindow = SW_HIDE;
+    memset(&pi, 0, sizeof(pi));
+    char *cl = _strdup(cmdline);
+    BOOL ok = CreateProcessA(NULL, cl, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi);
+    free(cl);
+    if (!ok) return 0;
+    WaitForSingleObject(pi.hProcess, timeout_ms);
+    DWORD code = 1;
+    GetExitCodeProcess(pi.hProcess, &code);
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+    return code == 0;
+}
+
+/* 用系统 tar 解压（zip / tar.gz 都吃），失败再用 PS 的 Expand-Archive */
 static int extract_to(const char *archive, const char *dest) {
     lz_dir_make(dest);
     char tarp[MAX_PATH];
-    snprintf(tarp, sizeof(tarp), "C:%cWindows%cSystem32%ctar.exe", 92, 92, 92);
+    find_tar(tarp, sizeof(tarp));
     char cmd[MAX_PATH * 6];
     snprintf(cmd, sizeof(cmd), "%c%s%c -xf %c%s%c -C %c%s%c",
              34, tarp, 34, 34, archive, 34, 34, dest, 34);
@@ -26,16 +61,18 @@ static int extract_to(const char *archive, const char *dest) {
     si.dwFlags = STARTF_USESHOWWINDOW;
     si.wShowWindow = SW_HIDE;
     memset(&pi, 0, sizeof(pi));
-    char *cl = _strdup(cmd);
-    BOOL ok = CreateProcessA(NULL, cl, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi);
-    free(cl);
-    if (!ok) return 0;
-    WaitForSingleObject(pi.hProcess, 10 * 60 * 1000);
-    DWORD code = 1;
-    GetExitCodeProcess(pi.hProcess, &code);
-    CloseHandle(pi.hProcess);
-    CloseHandle(pi.hThread);
-    return code == 0;
+    (void)si;
+    (void)pi;
+    if (run_hidden(cmd, 10 * 60 * 1000)) return 1;
+
+    /* tar 失败（老系统没 tar，或路径含非 ASCII 字符）→ 换 PS 解压 */
+    char ps[MAX_PATH * 8];
+    snprintf(ps, sizeof(ps),
+             "powershell -NoProfile -NonInteractive -Command "
+             "\"Expand-Archive -LiteralPath '%s' -DestinationPath '%s' -Force\"",
+             archive, dest);
+    if (run_hidden(ps, 10 * 60 * 1000)) return 1;
+    return 0;
 }
 
 /* 递归复制目录（用 xcopy，省得手写） */

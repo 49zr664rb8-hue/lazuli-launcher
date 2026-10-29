@@ -30,6 +30,50 @@ static const char *kind_dir(int kind) {
     }
 }
 
+/* 模组要装进「对应版本」的 mods 目录：
+   先按模组声明的游戏版本 + 加载器去已安装版本里找，找不到就用最近启动的版本，
+   再不行退回全局 mods 目录。 */
+static void mod_target_dir(const MdVer *v, int kind, char *out, size_t cap) {
+    char base[MAX_PATH * 3];
+    lz_path_join(base, sizeof(base), g.set.game_dir, kind_dir(kind));
+
+    if (kind != 1) {            /* 光影 / 材质 / 整合包不按版本分流 */
+        snprintf(out, cap, "%s", base);
+        return;
+    }
+
+    const char *want_game = (v && v->game[0]) ? v->game : NULL;
+    const char *want_ld   = (v && v->loader[0]) ? v->loader : NULL;
+    const char *pick = NULL;
+
+    for (int i = 0; i < g.nversions; i++) {
+        McVer *mv = &g.versions[i];
+        if (!mv->installed) continue;
+        if (want_game && !strstr(mv->id, want_game)) continue;
+        if (want_ld) {
+            int id_fab = strstr(mv->id, "fabric") != NULL;
+            int id_forge = strstr(mv->id, "forge") != NULL;
+            int id_neo = strstr(mv->id, "neoforge") != NULL;
+            if (strstr(want_ld, "fabric") && !id_fab) continue;
+            if (strstr(want_ld, "neoforge") && !id_neo) continue;
+            if (strstr(want_ld, "forge") && !id_neo && !id_forge) continue;
+        }
+        pick = mv->id;
+        break;
+    }
+    if (!pick && g.game.version[0]) pick = g.game.version;
+
+    if (pick && pick[0]) {
+        char vdir[MAX_PATH * 4];
+        lz_path_join(vdir, sizeof(vdir), g.set.game_dir, "versions");
+        lz_path_join(vdir, sizeof(vdir), vdir, pick);
+        lz_path_join(out, cap, vdir, kind_dir(kind));
+    } else {
+        snprintf(out, cap, "%s", base);
+    }
+}
+
+
 static int cf_class(int kind) {
     switch (kind) {
         case 2: return 6552;
@@ -505,7 +549,7 @@ void md_download_all(void) {
     LeaveCriticalSection(&g_lock);
 
     char dir[MAX_PATH * 3], dest[MAX_PATH * 4];
-    lz_path_join(dir, sizeof(dir), g.set.game_dir, kind_dir(kind));
+    mod_target_dir(&v, kind, dir, sizeof(dir));
     lz_dir_make(dir);
 
     lz_sanitize_filename(v.fname);
@@ -574,7 +618,7 @@ static DWORD WINAPI content_dl_thread(LPVOID p) {
     if (!url[0]) { app_toast("未能获取下载地址"); free(da); return 0; }
 
     char dest[MAX_PATH * 3], dir[MAX_PATH * 3];
-    lz_path_join(dir, sizeof(dir), g.set.game_dir, kind_dir(da->kind));
+    mod_target_dir(NULL, da->kind, dir, sizeof(dir));
     lz_dir_make(dir);
     lz_sanitize_filename(fname);
     lz_path_join(dest, sizeof(dest), dir, fname);
