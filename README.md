@@ -17,6 +17,13 @@ Windows 版直接下载：[`dist/LazuliLauncher.exe`](dist/LazuliLauncher.exe)�
 
 ---
 
+## 宣传片
+
+| 平台 | 视频 |
+| --- | --- |
+| Windows | [一款MC启动器](https://www.bilibili.com/video/BV1ENx36fE7W/) |
+| Android | [Lazuli Launcher Mobile](https://www.bilibili.com/video/BV1fTxw6iEfu/) |
+
 ## 更新日志
 
 ### v1.1.1
