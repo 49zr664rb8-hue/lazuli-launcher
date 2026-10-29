@@ -1236,10 +1236,7 @@ int java_ensure(const char *version_id, char *out, size_t cap) {
        不能只判断「太旧」——Java 25 跑 1.19.2 一样会崩 */
     char cand[MAX_PATH * 3];
     if (find_runtime_for(need, cand, sizeof(cand))) {
-        snprintf(out, cap, "%s", cand);
-        EnterCriticalSection(&g_lock);
-        snprintf(g.set.java_path, sizeof(g.set.java_path), "%s", cand);
-        LeaveCriticalSection(&g_lock);
+        snprintf(out, cap, "%s", cand);   /* 只返回，不改用户设置 */
         return 1;
     }
 
@@ -1265,34 +1262,18 @@ int java_ensure(const char *version_id, char *out, size_t cap) {
 static DWORD WINAPI launch_thread(LPVOID p) {
     LaunchArg *la = (LaunchArg *)p;
     char java[MAX_PATH * 3] = {0};
-    int need = mc_get_java_major(la->id);
 
-    EnterCriticalSection(&g_lock);
-    snprintf(java, sizeof(java), "%s", g.set.java_path);
-    LeaveCriticalSection(&g_lock);
-
-    if (!java[0] || !lz_file_exists(java)) {
-        if (!java_detect(java, sizeof(java))) java[0] = 0;
-    }
-
-    /* 版本要求的 Java 比现有的新 → 自动补齐运行时 */
-    int have = java[0] ? java_major_of(java) : 0;
-    if (have < need) {
+    /* 统一走 java_ensure：它会挑 major 正好匹配的运行时。
+       以前这里只判断 have < need，Java 25 跑 1.19.2 会被放行，
+       Forge 的 Mixin 处理不了 Java 25 字节码，游戏静默崩溃、没有任何报错。 */
+    if (!java_ensure(la->id, java, sizeof(java))) {
+        app_toast("没有可用的 Java，请到设置里指定");
         EnterCriticalSection(&g_lock);
-        snprintf(g.status, sizeof(g.status),
-                 have ? "需要 Java %d（当前 %d），正在准备…" : "未找到 Java，正在准备 Java %d…", need, have);
+        g.game.running = 0;
         LeaveCriticalSection(&g_lock);
         ui_request_redraw();
-        app_log("[启动] 需要 Java %d，现有 %d，开始下载运行时", need, have);
-        if (install_runtime_for(la->id, need)) {
-            EnterCriticalSection(&g_lock);
-            snprintf(java, sizeof(java), "%s", g.set.java_path);
-            LeaveCriticalSection(&g_lock);
-        }
-    } else if (java[0]) {
-        EnterCriticalSection(&g_lock);
-        snprintf(g.set.java_path, sizeof(g.set.java_path), "%s", java);
-        LeaveCriticalSection(&g_lock);
+        free(la);
+        return 0;
     }
 
     if (!java[0]) {
