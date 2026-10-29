@@ -159,24 +159,33 @@ void mc_refresh_installed(void) {
 /* ---------------------------------------------------------------- 解压 */
 static int extract_zip(const char *zip, const char *dest) {
     lz_dir_make(dest);
-    char sys[MAX_PATH];
-    GetSystemDirectoryA(sys, MAX_PATH);
-    char tar[MAX_PATH * 2];
-    lz_path_join(tar, sizeof(tar), sys, "tar.exe");
-    if (!lz_file_exists(tar)) return 0;
 
-    char cmd[MAX_PATH * 5];
-    snprintf(cmd, sizeof(cmd), "\"%s\" -xf \"%s\" -C \"%s\"", tar, zip, dest);
+    /* 不用 tar.exe：它会按「当前目录」搜 DLL，被别的 libarchive.dll 污染后
+       会弹「无法定位程序输入点 archive_parse_date」的模态框，把安装卡死。
+       改成复制成 .zip 后缀，交给 Expand-Archive（不依赖 libarchive）。 */
+    char tmpzip[MAX_PATH * 3];
+    snprintf(tmpzip, sizeof(tmpzip), "%s.lz.zip", zip);
+    CopyFileA(zip, tmpzip, FALSE);
+
+    char ps[MAX_PATH * 8];
+    snprintf(ps, sizeof(ps),
+             "powershell -NoProfile -NonInteractive -Command "
+             "\"$ProgressPreference='SilentlyContinue'; Expand-Archive -LiteralPath '%s' -DestinationPath '%s' -Force\"",
+             tmpzip, dest);
+
     STARTUPINFOA si; PROCESS_INFORMATION pi;
     memset(&si, 0, sizeof(si)); si.cb = sizeof(si);
     si.dwFlags = STARTF_USESHOWWINDOW; si.wShowWindow = SW_HIDE;
     memset(&pi, 0, sizeof(pi));
-    if (!CreateProcessA(NULL, cmd, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi))
+    if (!CreateProcessA(NULL, ps, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi)) {
+        DeleteFileA(tmpzip);
         return 0;
-    WaitForSingleObject(pi.hProcess, 60000);
+    }
+    WaitForSingleObject(pi.hProcess, 120000);
     DWORD code = 1;
     GetExitCodeProcess(pi.hProcess, &code);
     CloseHandle(pi.hProcess); CloseHandle(pi.hThread);
+    DeleteFileA(tmpzip);
     return code == 0;
 }
 

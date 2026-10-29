@@ -49,30 +49,27 @@ static int run_hidden(const char *cmdline, DWORD timeout_ms) {
 /* 用系统 tar 解压（zip / tar.gz 都吃），失败再用 PS 的 Expand-Archive */
 static int extract_to(const char *archive, const char *dest) {
     lz_dir_make(dest);
-    char tarp[MAX_PATH];
-    find_tar(tarp, sizeof(tarp));
-    char cmd[MAX_PATH * 6];
-    snprintf(cmd, sizeof(cmd), "%c%s%c -xf %c%s%c -C %c%s%c",
-             34, tarp, 34, 34, archive, 34, 34, dest, 34);
-    STARTUPINFOA si;
-    PROCESS_INFORMATION pi;
-    memset(&si, 0, sizeof(si));
-    si.cb = sizeof(si);
-    si.dwFlags = STARTF_USESHOWWINDOW;
-    si.wShowWindow = SW_HIDE;
-    memset(&pi, 0, sizeof(pi));
-    (void)si;
-    (void)pi;
-    if (run_hidden(cmd, 10 * 60 * 1000)) return 1;
 
-    /* tar 失败（老系统没 tar，或路径含非 ASCII 字符）→ 换 PS 解压 */
+    /* 不用 tar.exe：它会按当前目录搜 DLL，被别的 libarchive.dll 污染后
+       弹「无法定位程序输入点 archive_parse_date」的模态框，直接把安装卡死。
+       .mrpack 本质是 zip，复制成 .zip 后缀后用 Expand-Archive 解。 */
+    char tmpzip[MAX_PATH * 3];
+    snprintf(tmpzip, sizeof(tmpzip), "%s.zip", archive);
+    char *data = NULL;
+    size_t n = 0;
+    if (!lz_file_read(archive, &data, &n)) return 0;
+    int wrote = lz_file_write(tmpzip, data, n);
+    free(data);
+    if (!wrote) return 0;
+
     char ps[MAX_PATH * 8];
     snprintf(ps, sizeof(ps),
              "powershell -NoProfile -NonInteractive -Command "
-             "\"Expand-Archive -LiteralPath '%s' -DestinationPath '%s' -Force\"",
-             archive, dest);
-    if (run_hidden(ps, 10 * 60 * 1000)) return 1;
-    return 0;
+             "\"$ProgressPreference='SilentlyContinue'; Expand-Archive -LiteralPath '%s' -DestinationPath '%s' -Force\"",
+             tmpzip, dest);
+    int ok = run_hidden(ps, 10 * 60 * 1000);
+    DeleteFileA(tmpzip);
+    return ok;
 }
 
 /* 递归复制目录（用 xcopy，省得手写） */
