@@ -446,6 +446,13 @@ static void ver_row(RcF rr, const char *id, const char *type, const char *date,
     int hov = (ui.mx >= rr.x && ui.mx <= rr.x + rr.w && ui.my >= rr.y && ui.my <= rr.y + rr.h);
     if (hov) ui_fill_round(rr, 14, C_HOVER);
 
+    /* 整行点击必须最先注册：ui_hit 是倒序命中，后注册的优先级更高，
+       放在按钮后面会把按钮整个盖住，点了没反应 */
+    if (ui_hit(id_row, rr)) {
+        snprintf(ps.sel_ver, sizeof(ps.sel_ver), "%s", id);
+        ui.click = 0;
+    }
+
     ARGB bc, bf;
     const char *bt;
     if (loader == LD_FABRIC)       { bt = "Fab";  bc = LZ_ARGB(64, 255, 190, 60);  bf = LZ_ARGB(255, 170, 120, 0); }
@@ -501,10 +508,6 @@ static void ver_row(RcF rr, const char *id, const char *type, const char *date,
                 mc_install_async(id);
             }
         }
-    }
-    if (ui_hit(id_row, rr)) {
-        snprintf(ps.sel_ver, sizeof(ps.sel_ver), "%s", id);
-        ui.click = 0;
     }
     ui_line(rr.x + 16, rr.y + rr.h, rr.x + rr.w - 16, rr.y + rr.h, 1.0f, LZ_ARGB(26, 120, 140, 170));
 }
