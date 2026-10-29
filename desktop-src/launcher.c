@@ -989,7 +989,23 @@ static HANDLE build_and_run(const char *id, const char *java, const char *server
 #define KVADD(K, V) do { kv[nkv].k = K; kv[nkv].v = V; nkv++; } while (0)
     KVADD("auth_player_name", uname);
     KVADD("version_name", id);
-    KVADD("game_directory", g.set.game_dir);
+    /* 版本隔离：每个版本自己的 mods / saves / config */
+    static char iso_dir[MAX_PATH * 4];
+    if (g.set.version_isolate && id && id[0]) {
+        char vroot[MAX_PATH * 3];
+        lz_path_join(vroot, sizeof(vroot), g.set.game_dir, "versions");
+        lz_path_join(iso_dir, sizeof(iso_dir), vroot, id);
+        lz_dir_make(iso_dir);
+        const char *subs[] = { "mods", "saves", "config", "resourcepacks", "shaderpacks" };
+        for (int si = 0; si < 5; si++) {
+            char sd[MAX_PATH * 5];
+            lz_path_join(sd, sizeof(sd), iso_dir, subs[si]);
+            lz_dir_make(sd);
+        }
+    } else {
+        snprintf(iso_dir, sizeof(iso_dir), "%s", g.set.game_dir);
+    }
+    KVADD("game_directory", iso_dir);
     KVADD("assets_root", assets);
     KVADD("assets_index_name", assets_id);
     KVADD("auth_uuid", uuid);

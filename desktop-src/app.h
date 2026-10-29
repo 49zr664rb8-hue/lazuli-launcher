@@ -48,6 +48,7 @@ typedef struct {
     char msa_client_id[80];
     int  full_assets;
     int  vpad_scale;
+    int  version_isolate;   /* 版本隔离：每个版本独立的 mods/saves/config */
 } Settings;
 
 /* 账号本 */

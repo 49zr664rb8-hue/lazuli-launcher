@@ -1908,8 +1908,12 @@ static void page_set(RcF body) {
     ui_text(Rc(gs.x + 360, gs.y + 148, 200, 18), "资源文件", 11.5f, 0, C_TEXT2, 0);
     if (ui_chip(8115, Rc(gs.x + 420, gs.y + 142, 80, 28), "完整下载", g.set.full_assets))
         g.set.full_assets = !g.set.full_assets;
-    ui_text(Rc(gs.x + 510, gs.y + 148, w - 530, 18),
+    ui_text(Rc(gs.x + 510, gs.y + 148, w - 760, 18),
             g.set.full_assets ? "含声音/语言" : "仅游戏核心", 10.5f, 0, C_TEXT3, 0);
+    if (w > 760 && ui_chip(8116, Rc(gs.x + w - 200, gs.y + 142, 140, 28), "版本隔离", g.set.version_isolate)) {
+        g.set.version_isolate = !g.set.version_isolate;
+        app_toast(g.set.version_isolate ? "每个版本独立 mods / 存档" : "所有版本共用 mods / 存档");
+    }
 
     ui_text(Rc(gs.x + 24, gs.y + 196, 90, 18), "Java", 11.5f, 0, C_TEXT2, 0);
     ui_input(8120, Rc(gs.x + 120, gs.y + 188, w - 380, 36), ps.set_java, sizeof(ps.set_java), "自动检测");
