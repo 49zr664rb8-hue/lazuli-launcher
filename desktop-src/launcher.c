@@ -566,7 +566,17 @@ static int install_impl(const char *id, char *err, size_t errcap) {
     LeaveCriticalSection(&g_lock);
     if (mine == q) fq_destroy(q);
 
-    if (failed > 0) snprintf(err, errcap, "%d 个文件下载失败", failed);
+    if (failed > 0) {
+        /* 资源文件（assets）缺失不阻断：游戏照样能起，声音/语言可能不全。
+           只有库或主 jar 失败才算真失败——否则一个被杀软锁住的文件就能毁掉整个安装。 */
+        const char *le = fq_last_error(q);
+        if (le && (strstr(le, "\\assets\\") || strstr(le, "/assets/"))) {
+            app_log("[安装] 忽略 %d 个资源文件失败：%s", failed, le);
+            failed = 0;
+        } else {
+            snprintf(err, errcap, "%d 个文件下载失败：%s", failed, le ? le : "");
+        }
+    }
     return failed == 0;
 }
 

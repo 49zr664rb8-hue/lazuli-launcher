@@ -112,8 +112,8 @@ void app_load_settings(void) {
     char ad[MAX_PATH];
     lz_appdata(ad, sizeof(ad));
     char d[MAX_PATH * 2];
-    lz_path_join(d, sizeof(d), ad, "Lazuli");
-    lz_path_join(g.set.game_dir, sizeof(g.set.game_dir), d, "minecraft");
+    /* 默认用标准 .minecraft，和官方启动器 / HMCL 共用一套文件 */
+    lz_path_join(g.set.game_dir, sizeof(g.set.game_dir), ad, ".minecraft");
     g.set.mem_mb = 4096;
     g.set.dl_threads = 8;
     g.set.full_assets = 1;

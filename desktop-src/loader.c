@@ -214,7 +214,7 @@ int loader_install_sync(const char *mc, int kind, const char *lver, char *err, s
     snprintf(g.inst.stage, sizeof(g.inst.stage), "安装原版 %s", mc);
     LeaveCriticalSection(&g_lock);
     ui_request_redraw();
-    if (!install_impl_public(mc, err, errcap)) return 0;
+    if (!install_impl_public(mc, err, errcap)) return 0;   /* 原版必须完整 */
 
     if (kind == LD_FABRIC || kind == LD_QUILT) {
         char url[600];
@@ -292,12 +292,30 @@ int loader_install_sync(const char *mc, int kind, const char *lver, char *err, s
 
         char cmd[MAX_PATH * 5], logp[MAX_PATH * 2];
         snprintf(logp, sizeof(logp), "%s\\installer.log", cacheDir);
-        snprintf(cmd, sizeof(cmd), "\"%s\" -jar \"%s\" --installClient \"%s\"", java, cache, gd);
+        /* --installClient 不接受路径参数：安装器按「当前工作目录」找 launcher_profiles.json，
+           所以只传开关，工作目录由 run_cmd 的 workdir 指定 */
+        snprintf(cmd, sizeof(cmd), "\"%s\" -jar \"%s\" --installClient", java, cache);
         app_log("[加载器] %s", cmd);
         int rc = run_cmd(cmd, gd, 15 * 60 * 1000, logp);
         if (rc != 0) {
             snprintf(err, errcap, "%s 安装器返回 %d，详见 cache\\installer.log", loader_name(kind), rc);
             return 0;
+        }
+
+        /* 校验：安装器必须在本游戏目录的 versions 下生成 <vid>.json */
+        char vjson[MAX_PATH * 4];
+        lz_path_join(vjson, sizeof(vjson), gd, "versions");
+        lz_path_join(vjson, sizeof(vjson), vjson, vid);
+        lz_path_join(vjson, sizeof(vjson), vjson, "");
+        {
+            char jf[MAX_PATH * 5];
+            snprintf(jf, sizeof(jf), "%s%s.json", vjson, vid);
+            if (!lz_file_exists(jf)) {
+                snprintf(err, errcap,
+                         "%s 安装器跑完了，但没在游戏目录生成版本 %s（可能装到了默认 .minecraft）。"
+                         "详见 cache\\installer.log", loader_name(kind), vid);
+                return 0;
+            }
         }
     }
 

@@ -304,8 +304,16 @@ static DWORD WINAPI fq_worker(LPVOID param) {
         }
 
         mkdir_for(job->path);
-        HANDLE f = CreateFileA(job->path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
-                               FILE_ATTRIBUTE_NORMAL, NULL);
+        /* 杀软扫描 / 其它进程占用会导致 CreateFile 报 32、5，重试几次 */
+        HANDLE f = INVALID_HANDLE_VALUE;
+        for (int attempt = 0; attempt < 6; attempt++) {
+            f = CreateFileA(job->path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
+                            FILE_ATTRIBUTE_NORMAL, NULL);
+            if (f != INVALID_HANDLE_VALUE) break;
+            DWORD e = GetLastError();
+            if (e != ERROR_SHARING_VIOLATION && e != ERROR_ACCESS_DENIED) break;
+            Sleep(120 * (DWORD)(attempt + 1));
+        }
         if (f == INVALID_HANDLE_VALUE) {
             job->state = 3;
             EnterCriticalSection(&q->lock);
