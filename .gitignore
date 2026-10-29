@@ -10,3 +10,7 @@ build/
 *.keystore
 *.jks
 local.properties
+
+# 发布产物：允许 dist 下的 exe 入库，方便直接下载
+!dist/
+!dist/*.exe

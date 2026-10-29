@@ -11,6 +11,36 @@
 
 ---
 
+## 下载
+
+Windows 版直接下载：[`dist/LazuliLauncher.exe`](dist/LazuliLauncher.exe)（约 370 KB，免安装）
+
+---
+
+## 更新日志
+
+### v1.1.0
+
+**新功能**
+- 版本隔离：每个版本独立的 `mods` / `saves` / `config`，设置里可开关
+- 版本列表可直接删除版本（两段确认；被 Forge/Fabric 版本依赖时拒绝删除）
+- 皮肤支持本地预览，未登录也能导入衣架
+
+**修复**
+- 分块下载：核对磁盘实际大小，不符自动回退单线程重下
+- 下载失败不再留下 0 字节的残骸文件；启动前自动清理空 jar
+- 彻底移除对 `tar.exe` 的依赖，改用 `Expand-Archive`（避免 libarchive DLL 冲突）
+- 模组下载落到全局 `mods` 的问题（`content_kind` 判断错误）
+- 版本行「删除」「启动」按钮点不动（命中区注册顺序）
+- Forge/NeoForge 安装失败：`--installClient` 不接受路径参数
+- Forge 安装器 `Injecting profile` 失败：`launcher_profiles.json` 写入多了一个 `\0`
+- Java 版本选错：原来只判断「太旧」，Java 25 跑 1.19.2 会静默崩溃
+- 版本 json 未沿 `inheritsFrom` 读取 `javaVersion`
+- Forge 模块冲突（`minecraft` 与 `_1._19._2` 重复导出）：修正 `-DignoreList`
+- 默认游戏目录改为标准 `%APPDATA%\.minecraft`
+
+---
+
 ## 目录
 
 ```
