@@ -37,7 +37,7 @@ static void mod_target_dir(const MdVer *v, int kind, char *out, size_t cap) {
     char base[MAX_PATH * 3];
     lz_path_join(base, sizeof(base), g.set.game_dir, kind_dir(kind));
 
-    if (kind != 1) {            /* 光影 / 材质 / 整合包不按版本分流 */
+    if (kind != 0 && kind != 1) {   /* 只有 mods 按版本分流；光影/材质/整合包不分 */
         snprintf(out, cap, "%s", base);
         return;
     }
@@ -62,6 +62,7 @@ static void mod_target_dir(const MdVer *v, int kind, char *out, size_t cap) {
         break;
     }
     if (!pick && g.game.version[0]) pick = g.game.version;
+    if (!pick && g.set.last_version[0]) pick = g.set.last_version;
 
     if (pick && pick[0]) {
         char vdir[MAX_PATH * 4];
@@ -556,6 +557,7 @@ void md_download_all(void) {
     lz_path_join(dest, sizeof(dest), dir, v.fname);
     DlTask *t = dl_start(v.url, dest, g.set.dl_threads, ui_request_redraw);
     if (t) tasks_add(t);
+    if (kind == 0 || kind == 1) app_toast("下载到：%s", dir);
 
     int n = 0;
     for (int i = 0; i < nd; i++) {

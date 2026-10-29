@@ -103,6 +103,7 @@ void app_save_settings(void) {
     sb_printf(&b, "terracotta=%s\n", g.set.terracotta);
     sb_printf(&b, "full_assets=%d\n", g.set.full_assets);
     sb_printf(&b, "version_isolate=%d\n", g.set.version_isolate);
+    sb_printf(&b, "last_version=%s\n", g.set.last_version);
     lz_file_write(p, b.s ? b.s : "", b.n);
     sb_free(&b);
 }
@@ -134,6 +135,7 @@ void app_load_settings(void) {
         else if (!strcmp(k, "mem_mb")) g.set.mem_mb = LZ_CLAMP(atoi(v), 512, 65536);
         else if (!strcmp(k, "dl_threads")) g.set.dl_threads = LZ_CLAMP(atoi(v), 1, 32);
         else if (!strcmp(k, "version_isolate")) g.set.version_isolate = atoi(v) ? 1 : 0;
+        else if (!strcmp(k, "last_version")) snprintf(g.set.last_version, sizeof(g.set.last_version), "%s", v);
         else if (!strcmp(k, "cf_key")) snprintf(g.set.cf_key, sizeof(g.set.cf_key), "%s", v);
         else if (!strcmp(k, "relay")) snprintf(g.set.relay, sizeof(g.set.relay), "%s", v);
         else if (!strcmp(k, "msa_client_id")) snprintf(g.set.msa_client_id, sizeof(g.set.msa_client_id), "%s", v);

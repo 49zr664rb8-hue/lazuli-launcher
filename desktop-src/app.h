@@ -49,6 +49,7 @@ typedef struct {
     int  full_assets;
     int  vpad_scale;
     int  version_isolate;   /* 版本隔离：每个版本独立的 mods/saves/config */
+    char last_version[64];  /* 上次启动的版本，用于模组下载定位 */
 } Settings;
 
 /* 账号本 */

@@ -1126,6 +1126,7 @@ static HANDLE build_and_run(const char *id, const char *java, const char *server
     EnterCriticalSection(&g_lock);
     g.game.running = 1;
     snprintf(g.game.version, sizeof(g.game.version), "%s", id);
+    snprintf(g.set.last_version, sizeof(g.set.last_version), "%s", id);
     snprintf(g.game.log_path, sizeof(g.game.log_path), "%s", logfile);
     LeaveCriticalSection(&g_lock);
     ui_request_redraw();
@@ -1269,6 +1270,7 @@ void mc_launch_async(const char *id, const char *server, int port) {
     EnterCriticalSection(&g_lock);
     g.game.running = 1;
     snprintf(g.game.version, sizeof(g.game.version), "%s", id);
+    snprintf(g.set.last_version, sizeof(g.set.last_version), "%s", id);
     LeaveCriticalSection(&g_lock);
     CloseHandle(CreateThread(NULL, 0, launch_thread, la, 0, NULL));
     ui_request_redraw();
