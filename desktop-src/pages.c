@@ -7,6 +7,7 @@
 
 static struct {
     char sel_ver[64];
+    char del_pending[64];   /* 待确认删除的版本 */
     int  ver_filter;          /* 0 全部 1 正式 2 快照 3 远古 */
     char ver_q[80];
     char dl_q[160];
@@ -459,7 +460,32 @@ static void ver_row(RcF rr, const char *id, const char *type, const char *date,
     ui_text(Rc(rr.x + 74, rr.y, 280, rr.h), id, 13.5f, 1, C_TEXT, 0);
     if (date && date[0]) ui_text(Rc(rr.x + 360, rr.y, 110, rr.h), date, 11.0f, 0, C_TEXT3, 0);
     if (installed)
-        ui_text(Rc(rr.x + rr.w - 250, rr.y, 130, rr.h), "已安装", 11.0f, 0, C_GREEN, 2);
+        ui_text(Rc(rr.x + rr.w - 340, rr.y, 120, rr.h), "已安装", 11.0f, 0, C_GREEN, 2);
+
+    if (installed) {
+        int pending = !strcmp(ps.del_pending, id);
+        RcF dr = Rc(rr.x + rr.w - 190, rr.y + 11, 84, 30);
+        if (ui_button(id_btn + 500, dr, pending ? "确认删除" : "删除",
+                      pending ? BTN_PRIMARY : BTN_GHOST)) {
+            if (pending) {
+                char vp[MAX_PATH * 3], vr[MAX_PATH * 3];
+                lz_path_join(vr, sizeof(vr), g.set.game_dir, "versions");
+                lz_path_join(vp, sizeof(vp), vr, id);
+                if (g.game.running && !strcmp(g.game.version, id)) {
+                    app_toast("这个版本正在运行，先关掉游戏");
+                } else if (lz_dir_remove(vp)) {
+                    app_toast("已删除版本 %s", id);
+                    ps.del_pending[0] = 0;
+                    ps.myv_dirty = 1;
+                    scan_my_versions();
+                } else {
+                    app_toast("删除失败，可能文件被占用");
+                }
+            } else {
+                snprintf(ps.del_pending, sizeof(ps.del_pending), "%s", id);
+            }
+        }
+    }
 
     RcF br = Rc(rr.x + rr.w - 96, rr.y + 11, 84, 30);
     if (installed) {
@@ -1451,17 +1477,27 @@ static void page_skin(RcF body) {
     RcF stage = Rc(pv.x + 18, pv.y + 70, lw - 36, pv.h - 190);
     ui_fill_round(stage, 16, LZ_ARGB(26, 255, 255, 255));
 
-    void *img = NULL;
-    if (logged) img = ui_image_load(g.skin.png);
+    /* 优先预览衣架里选中的本地皮肤，没有才用账号皮肤 */
+    const char *src = NULL;
+    int local = 0;
+    if (ps_skin_sel >= 0 && ps_skin_sel < skin_wardrobe_count()) {
+        src = skin_wardrobe_item(ps_skin_sel);
+        local = 1;
+    } else if (logged) {
+        src = g.skin.png;
+    }
+    void *img = src ? ui_image_load(src) : NULL;
     if (img) {
         draw_doll(img, Rc(stage.x, stage.y + 10, stage.w, stage.h - 20), g.skin.model);
     } else {
         ui_text(Rc(stage.x, stage.y + stage.h / 2 - 14, stage.w, 28),
                 logged ? (g.skin.state == 1 ? "正在获取皮肤…" : "还没有皮肤")
-                       : "登录后可以导入皮肤",
+                       : "导入一套皮肤就能预览",
                 12.0f, 0, C_TEXT3, 1);
     }
     if (img) ui_image_free(img);
+    if (local)
+        ui_text(Rc(pv.x + 22, pv.y + 62, lw - 44, 16), "本地预览（未上传）", 10.0f, 0, C_TEXT3, 0);
 
     /* 模型切换 + 导入 */
     if (ui_chip(7001, Rc(pv.x + 20, pv.y + pv.h - 106, 88, 32), "经典", g.skin.model == 0))
@@ -1470,8 +1506,7 @@ static void page_skin(RcF body) {
         g.skin.model = 1;
 
     if (ui_button(7003, Rc(pv.x + 20, pv.y + pv.h - 64, 140, 40), "导入皮肤文件", BTN_PRIMARY)) {
-        if (!logged) { app_toast("请先登录微软账号"); }
-        else {
+        {
             char path[MAX_PATH] = {0};
             if (win_pick_file(path, sizeof(path), "皮肤图片 (*.png)\0*.png\0所有文件\0*.*\0")) {
                 char dir[MAX_PATH * 2], dst[MAX_PATH * 3];
@@ -1497,7 +1532,8 @@ static void page_skin(RcF body) {
                     ps_skin_sel = -1;
                     for (int i = 0; i < skin_wardrobe_count(); i++)
                         if (!strcmp(skin_wardrobe_item(i), dst)) ps_skin_sel = i;
-                    skin_upload_async(dst, g.skin.model);
+                    if (logged) skin_upload_async(dst, g.skin.model);
+                    else app_toast("已导入，可以本地预览；登录后可穿到账号");
                 } else {
                     app_toast("读不到这个文件");
                 }
