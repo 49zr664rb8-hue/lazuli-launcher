@@ -853,26 +853,37 @@ void java_install_async(int major) {
 }
 
 /* 读取版本要求的 Java 组件名（如 java-runtime-epsilon） */
+/* Forge/Fabric 的版本 json 里没有 javaVersion，要沿 inheritsFrom 往上找 */
+static JVal *ver_json_chain(const char *id) {
+    char cur[96];
+    snprintf(cur, sizeof(cur), "%s", id);
+    for (int depth = 0; depth < 4; depth++) {
+        char p[MAX_PATH * 2];
+        ver_file(p, sizeof(p), cur, "json");
+        char *txt = NULL;
+        if (!lz_file_read(p, &txt, NULL)) return NULL;
+        JVal *root = json_parse(txt);
+        free(txt);
+        if (!root) return NULL;
+        if (json_path(root, "javaVersion.majorVersion")) return root;
+        const char *parent = json_str(json_get(root, "inheritsFrom"), "");
+        if (!parent[0]) return root;
+        snprintf(cur, sizeof(cur), "%s", parent);
+        json_free(root);
+    }
+    return NULL;
+}
+
 static void mc_java_component(const char *id, char *out, size_t cap) {
     out[0] = 0;
-    char p[MAX_PATH * 2];
-    ver_file(p, sizeof(p), id, "json");
-    char *txt = NULL;
-    if (!lz_file_read(p, &txt, NULL)) return;
-    JVal *root = json_parse(txt);
-    free(txt);
+    JVal *root = ver_json_chain(id);
     if (!root) return;
     snprintf(out, cap, "%s", json_str(json_path(root, "javaVersion.component"), ""));
     json_free(root);
 }
 
 int mc_get_java_major(const char *id) {
-    char p[MAX_PATH * 2];
-    ver_file(p, sizeof(p), id, "json");
-    char *txt = NULL;
-    if (!lz_file_read(p, &txt, NULL)) return 8;
-    JVal *root = json_parse(txt);
-    free(txt);
+    JVal *root = ver_json_chain(id);
     if (!root) return 8;
     int major = (int)json_num(json_path(root, "javaVersion.majorVersion"), 0);
     if (major == 0) {
@@ -1170,6 +1181,32 @@ static int java_major_of(const char *path) {
 }
 
 /* 下载与版本匹配的 Java 运行时，返回 1 成功 */
+/* 在 <game_dir>/runtime/* 里找 major 匹配的 java.exe */
+static int find_runtime_for(int need, char *out, size_t cap) {
+    char rd[MAX_PATH * 3], pat[MAX_PATH * 4];
+    lz_path_join(rd, sizeof(rd), g.set.game_dir, "runtime");
+    snprintf(pat, sizeof(pat), "%s\\*", rd);
+    WIN32_FIND_DATAA fd;
+    HANDLE h = FindFirstFileA(pat, &fd);
+    if (h == INVALID_HANDLE_VALUE) return 0;
+    int found = 0;
+    do {
+        if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) continue;
+        if (fd.cFileName[0] == '.') continue;
+        char jp[MAX_PATH * 5];
+        lz_path_join(jp, sizeof(jp), rd, fd.cFileName);
+        lz_path_join(jp, sizeof(jp), jp, "bin\\java.exe");
+        if (!lz_file_exists(jp)) continue;
+        if (java_major_of(jp) == need) {
+            snprintf(out, cap, "%s", jp);
+            found = 1;
+            break;
+        }
+    } while (FindNextFileA(h, &fd));
+    FindClose(h);
+    return found;
+}
+
 static int install_runtime_for(const char *version_id, int need) {
     JavaArg *ja = (JavaArg *)calloc(1, sizeof(JavaArg));
     if (!ja) return 0;
@@ -1194,11 +1231,24 @@ int java_ensure(const char *version_id, char *out, size_t cap) {
         if (!java_detect(java, sizeof(java))) java[0] = 0;
     }
     int need = mc_get_java_major(version_id);
+
+    /* 先找已经下好的、major 正好对得上的运行时；
+       不能只判断「太旧」——Java 25 跑 1.19.2 一样会崩 */
+    char cand[MAX_PATH * 3];
+    if (find_runtime_for(need, cand, sizeof(cand))) {
+        snprintf(out, cap, "%s", cand);
+        EnterCriticalSection(&g_lock);
+        snprintf(g.set.java_path, sizeof(g.set.java_path), "%s", cand);
+        LeaveCriticalSection(&g_lock);
+        return 1;
+    }
+
     int have = java[0] ? java_major_of(java) : 0;
-    if (have < need) {
+    if (have == need) { snprintf(out, cap, "%s", java); return 1; }
+    if (have != 0) {
         EnterCriticalSection(&g_lock);
         snprintf(g.status, sizeof(g.status),
-                 have ? "Java %d 版本过低，正在准备 Java %d…" : "未找到 Java，正在准备 Java %d…", need);
+                 have ? "需要 Java %d（当前 %d），正在准备…" : "未找到 Java，正在准备 Java %d…", need, have);
         LeaveCriticalSection(&g_lock);
         ui_request_redraw();
         app_log("[Java] 需要 %d，现有 %d，开始下载运行时", need, have);
@@ -1230,7 +1280,7 @@ static DWORD WINAPI launch_thread(LPVOID p) {
     if (have < need) {
         EnterCriticalSection(&g_lock);
         snprintf(g.status, sizeof(g.status),
-                 have ? "Java %d 版本过低，正在准备 Java %d…" : "未找到 Java，正在准备 Java %d…", need);
+                 have ? "需要 Java %d（当前 %d），正在准备…" : "未找到 Java，正在准备 Java %d…", need, have);
         LeaveCriticalSection(&g_lock);
         ui_request_redraw();
         app_log("[启动] 需要 Java %d，现有 %d，开始下载运行时", need, have);

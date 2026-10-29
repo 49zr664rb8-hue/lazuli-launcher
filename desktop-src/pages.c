@@ -478,8 +478,39 @@ static void ver_row(RcF rr, const char *id, const char *type, const char *date,
                 char vp[MAX_PATH * 3], vr[MAX_PATH * 3];
                 lz_path_join(vr, sizeof(vr), g.set.game_dir, "versions");
                 lz_path_join(vp, sizeof(vp), vr, id);
+
+                /* Forge/Fabric 版本靠 inheritsFrom 指向原版，删掉父版本会让它们全部失效 */
+                int deps = 0;
+                char pat2[MAX_PATH * 4];
+                snprintf(pat2, sizeof(pat2), "%s\\*", vr);
+                WIN32_FIND_DATAA fd2;
+                HANDLE h2 = FindFirstFileA(pat2, &fd2);
+                if (h2 != INVALID_HANDLE_VALUE) {
+                    do {
+                        if (!(fd2.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) continue;
+                        if (fd2.cFileName[0] == '.') continue;
+                        if (!strcmp(fd2.cFileName, id)) continue;
+                        char jp[MAX_PATH * 4];
+                        lz_path_join(jp, sizeof(jp), vr, fd2.cFileName);
+                        char jn[128];
+                        snprintf(jn, sizeof(jn), "%s.json", fd2.cFileName);
+                        lz_path_join(jp, sizeof(jp), jp, jn);
+                        char *t = NULL;
+                        if (lz_file_read(jp, &t, NULL)) {
+                            char key[160];
+                            snprintf(key, sizeof(key), "\"inheritsFrom\":\"%s\"", id);
+                            if (strstr(t, key)) deps++;
+                            free(t);
+                        }
+                    } while (FindNextFileA(h2, &fd2));
+                    FindClose(h2);
+                }
+
                 if (g.game.running && !strcmp(g.game.version, id)) {
                     app_toast("这个版本正在运行，先关掉游戏");
+                } else if (deps > 0) {
+                    app_toast("还有 %d 个版本依赖 %s（Forge/Fabric），先删它们", deps, id);
+                    ps.del_pending[0] = 0;
                 } else if (lz_dir_remove(vp)) {
                     app_toast("已删除版本 %s", id);
                     ps.del_pending[0] = 0;
