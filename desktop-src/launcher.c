@@ -943,6 +943,34 @@ static void add_arg_expanded(Sb *cmd, const char *raw, KV *kv, int n) {
     sb_free(&tmp);
 }
 
+/* Forge 的 jvm 参数里有 -DignoreList=...,${version_name}.jar，
+   作用是让 bootstraplauncher 忽略原版 client jar（它自己提供打过补丁的类）。
+   继承版本的 jar 实际来自父版本（比如 1.19.2.jar），跟 version_name 对不上，
+   忽略不掉就会变成自动模块 _1._19._2，和 forge 的 minecraft 模块重复导出同一个包：
+   "Modules minecraft and _1._19._2 export package net.minecraft.client.main"
+   这里把 ignoreList 里的 <id>.jar 换成真实的 jar 文件名。 */
+static void fix_forge_ignorelist(Sb *cmd, const char *id, const char *jar) {
+    if (!cmd || !cmd->s || !id || !id[0] || !jar || !jar[0]) return;
+    const char *bn = strrchr(jar, '\\');
+    if (!bn) bn = strrchr(jar, '/');
+    bn = bn ? bn + 1 : jar;
+    if (!strcmp(bn, id)) return;
+
+    char from[160], to[160];
+    snprintf(from, sizeof(from), "%s.jar", id);
+    snprintf(to, sizeof(to), "%s", bn);
+    if (strlen(to) >= strlen(from)) return;   /* 只在变短时原地替换 */
+
+    size_t flen = strlen(from), tlen = strlen(to);
+    char *q = cmd->s;
+    while ((q = strstr(q, from)) != NULL) {
+        memmove(q + tlen, q + flen, strlen(q + flen) + 1);
+        memcpy(q, to, tlen);
+        q += tlen;
+    }
+    cmd->n = strlen(cmd->s);
+}
+
 static HANDLE build_and_run(const char *id, const char *java, const char *server, int port,
                             char *err, size_t errcap) {
     if (g.auth.state != AUTH_OK || !g.auth.token[0]) {
@@ -1140,6 +1168,8 @@ static HANDLE build_and_run(const char *id, const char *java, const char *server
     si.dwFlags = STARTF_USESTDHANDLES;
     si.hStdOutput = hlog; si.hStdError = hlog;
     si.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+
+    fix_forge_ignorelist(&cmd, id, jar);
 
     BOOL ok = CreateProcessA(NULL, cmd.s, NULL, NULL, TRUE, CREATE_NO_WINDOW,
                              NULL, g.set.game_dir, &si, &pi);
