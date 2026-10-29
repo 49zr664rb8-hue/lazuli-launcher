@@ -1289,9 +1289,45 @@ int java_ensure(const char *version_id, char *out, size_t cap) {
     return 1;
 }
 
+/* 启动前清理 0 字节的模组/资源包文件。
+   下载中断留下的空 jar 会让 Forge 在读取时直接崩溃，且没有任何提示。 */
+static int clean_broken_jars(const char *dir) {
+    char pat[MAX_PATH * 4];
+    snprintf(pat, sizeof(pat), "%s\\*.jar", dir);
+    WIN32_FIND_DATAA fd;
+    HANDLE h = FindFirstFileA(pat, &fd);
+    if (h == INVALID_HANDLE_VALUE) return 0;
+    int n = 0;
+    do {
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+        char full[MAX_PATH * 5];
+        snprintf(full, sizeof(full), "%s\\%s", dir, fd.cFileName);
+        if (lz_file_size(full) <= 0) {
+            if (DeleteFileA(full)) n++;
+        }
+    } while (FindNextFileA(h, &fd));
+    FindClose(h);
+    return n;
+}
+
 static DWORD WINAPI launch_thread(LPVOID p) {
     LaunchArg *la = (LaunchArg *)p;
     char java[MAX_PATH * 3] = {0};
+
+    /* 清掉上次下载中断留下的空 jar，否则 Forge 会静默崩溃 */
+    {
+        char md[MAX_PATH * 4];
+        if (g.set.version_isolate) {
+            char vr[MAX_PATH * 3];
+            lz_path_join(vr, sizeof(vr), g.set.game_dir, "versions");
+            lz_path_join(md, sizeof(md), vr, la->id);
+            lz_path_join(md, sizeof(md), md, "mods");
+        } else {
+            lz_path_join(md, sizeof(md), g.set.game_dir, "mods");
+        }
+        int bad = clean_broken_jars(md);
+        if (bad > 0) app_toast("已清理 %d 个损坏的模组文件", bad);
+    }
 
     /* 统一走 java_ensure：它会挑 major 正好匹配的运行时。
        以前这里只判断 have < need，Java 25 跑 1.19.2 会被放行，

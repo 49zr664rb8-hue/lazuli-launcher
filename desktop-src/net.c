@@ -487,9 +487,20 @@ static void dl_single(DlTask *t) {
     t->state = 1;
     int r = http_do("GET", t->url, NULL, 0, NULL, 0, dl_wr, &w, &info);
     CloseHandle(f);
-    if (t->cancel) { t->state = 4; }
-    else if (r && !w.err && info.status >= 200 && info.status < 300) t->state = 2;
-    else dl_set_err(t, "下载失败");
+    int good = r && !w.err && info.status >= 200 && info.status < 300;
+    /* 状态码正常但一个字节都没写，同样算失败 */
+    if (good && t->got <= 0) good = 0;
+    if (t->cancel) {
+        t->state = 4;
+        DeleteFileA(t->path);
+    } else if (good) {
+        t->state = 2;
+    } else {
+        /* 关键：失败要把半成品删掉，否则 0 字节的 jar 留在 mods 里，
+           下次启动 Forge 读到坏 zip 直接崩，而且完全没有提示 */
+        DeleteFileA(t->path);
+        dl_set_err(t, "下载失败");
+    }
     if (t->on_change) t->on_change();
 }
 
