@@ -173,7 +173,15 @@ static DWORD WINAPI auth_thread(LPVOID param) {
             return 0;
         }
         const char *at = json_str(json_get(tj, "access_token"), NULL);
+        const char *rt = json_str(json_get(tj, "refresh_token"), NULL);
         if (at) { ms_token = (char *)calloc(1, strlen(at) + 1); strcpy(ms_token, at); }
+        if (rt) {
+            /* 存下来，之后 token 过期可以免登录刷新 */
+            EnterCriticalSection(&g_lock);
+            snprintf(g.auth.refresh, sizeof(g.auth.refresh), "%s", rt);
+            LeaveCriticalSection(&g_lock);
+            app_log("[登录] 已保存 refresh_token（%d 字节）", (int)strlen(rt));
+        }
         json_free(tj);
         break;
     }
@@ -286,6 +294,145 @@ static DWORD WINAPI auth_thread(LPVOID param) {
     return 0;
 }
 
+/* 用 refresh_token 换新的 Minecraft 令牌（同步，启动前调用）。
+   微软的 access_token 只有 24 小时，过期后游戏会提示「无效的会话 ID」。 */
+int auth_refresh_blocking(char *err, size_t errcap) {
+    char rt[2048];
+    EnterCriticalSection(&g_lock);
+    snprintf(rt, sizeof(rt), "%s", g.auth.refresh);
+    LeaveCriticalSection(&g_lock);
+
+    if (!rt[0]) {
+        if (err) snprintf(err, errcap, "没有 refresh_token，请重新登录");
+        return 0;
+    }
+
+    char *enc = lz_url_encode(rt);
+    char body[8192];
+    snprintf(body, sizeof(body),
+             "grant_type=refresh_token&client_id=%s&refresh_token=%s"
+             "&scope=XboxLive.SignIn%%20XboxLive.offline_access",
+             ms_client_id(), enc ? enc : rt);
+    free(enc);
+
+    int st = 0;
+    char *r = post_form(URL_TOKEN, body, &st);
+    if (!r) { if (err) snprintf(err, errcap, "无法连接微软服务"); return 0; }
+    JVal *j = json_parse(r);
+    free(r);
+    if (!j) { if (err) snprintf(err, errcap, "刷新响应解析失败"); return 0; }
+
+    const char *at = json_str(json_get(j, "access_token"), NULL);
+    const char *nrt = json_str(json_get(j, "refresh_token"), NULL);
+    const char *ed = json_str(json_get(j, "error_description"), NULL);
+    if (!at) {
+        if (err) snprintf(err, errcap, "%s", ed ? ed : "刷新令牌被拒绝");
+        app_log("[登录] 刷新失败: %s", ed ? ed : "无 access_token");
+        json_free(j);
+        return 0;
+    }
+    char ms_token[4096];
+    snprintf(ms_token, sizeof(ms_token), "%s", at);
+    if (nrt && nrt[0]) {
+        EnterCriticalSection(&g_lock);
+        snprintf(g.auth.refresh, sizeof(g.auth.refresh), "%s", nrt);
+        LeaveCriticalSection(&g_lock);
+    }
+    json_free(j);
+
+    /* ---- Xbox Live ---- */
+    char xblbody[4600];
+    snprintf(xblbody, sizeof(xblbody),
+             "{\"Properties\":{\"AuthMethod\":\"RPS\",\"SiteName\":\"user.auth.xboxlive.com\","
+             "\"RpsTicket\":\"d=%s\"},\"RelyingParty\":\"http://auth.xboxlive.com\","
+             "\"TokenType\":\"JWT\"}", ms_token);
+    int s3 = 0;
+    char *xr = post_json(URL_XBL, xblbody, NULL, 0, &s3);
+    if (!xr) { if (err) snprintf(err, errcap, "Xbox Live 认证失败"); return 0; }
+    JVal *xj = json_parse(xr);
+    free(xr);
+    const char *xbl = xj ? json_str(json_get(xj, "Token"), NULL) : NULL;
+    const char *uhs = xj ? json_str(json_path(xj, "DisplayClaims.xui.0.uhs"), NULL) : NULL;
+    if (!xbl || !uhs) {
+        if (xj) json_free(xj);
+        if (err) snprintf(err, errcap, "Xbox Live 返回数据异常");
+        return 0;
+    }
+    char xbl_tok[4096], xbl_uhs[64];
+    snprintf(xbl_tok, sizeof(xbl_tok), "%s", xbl);
+    snprintf(xbl_uhs, sizeof(xbl_uhs), "%s", uhs);
+    json_free(xj);
+
+    /* ---- XSTS ---- */
+    char xsbody[4300];
+    snprintf(xsbody, sizeof(xsbody),
+             "{\"Properties\":{\"SandboxId\":\"RETAIL\",\"UserTokens\":[\"%s\"]},"
+             "\"RelyingParty\":\"rp://api.minecraftservices.com/\",\"TokenType\":\"JWT\"}", xbl_tok);
+    int s4 = 0;
+    char *xr2 = post_json(URL_XSTS, xsbody, NULL, 0, &s4);
+    if (!xr2) { if (err) snprintf(err, errcap, "XSTS 认证失败"); return 0; }
+    JVal *x2 = json_parse(xr2);
+    free(xr2);
+    if (!x2) { if (err) snprintf(err, errcap, "XSTS 响应解析失败"); return 0; }
+    const char *xsts = json_str(json_get(x2, "Token"), NULL);
+    const char *xuid = json_str(json_path(x2, "DisplayClaims.xui.0.xid"), "0");
+    if (!xsts) {
+        json_free(x2);
+        if (err) snprintf(err, errcap, "XSTS 认证失败");
+        return 0;
+    }
+    char xsts_tok[4096], xuid_s[64];
+    snprintf(xsts_tok, sizeof(xsts_tok), "%s", xsts);
+    snprintf(xuid_s, sizeof(xuid_s), "%s", xuid);
+    json_free(x2);
+
+    /* ---- Minecraft Services ---- */
+    char mcbody[4300];
+    snprintf(mcbody, sizeof(mcbody),
+             "{\"identityToken\":\"XBL3.0 x=%s;%s\"}", xbl_uhs, xsts_tok);
+    int s5 = 0;
+    char *mr = post_json(URL_MCLOGIN, mcbody, NULL, 0, &s5);
+    if (!mr) { if (err) snprintf(err, errcap, "Minecraft 服务认证失败"); return 0; }
+    JVal *mj = json_parse(mr);
+    free(mr);
+    if (!mj) { if (err) snprintf(err, errcap, "Minecraft 响应解析失败"); return 0; }
+    const char *mtok = json_str(json_get(mj, "access_token"), NULL);
+    if (!mtok) {
+        json_free(mj);
+        if (err) snprintf(err, errcap, "未能获取 Minecraft 令牌");
+        return 0;
+    }
+    char mc_tok[4096];
+    snprintf(mc_tok, sizeof(mc_tok), "%s", mtok);
+    json_free(mj);
+
+    /* ---- 档案 ---- */
+    char hdr[4300];
+    snprintf(hdr, sizeof(hdr), "Authorization: Bearer %s", mc_tok);
+    const char *hs[] = { hdr };
+    int s6 = 0;
+    char *pr = get_json(URL_PROFILE, hs, 1, &s6);
+    if (!pr) { if (err) snprintf(err, errcap, "该账号未拥有 Minecraft Java 版"); return 0; }
+    JVal *pj = json_parse(pr);
+    free(pr);
+    if (!pj) { if (err) snprintf(err, errcap, "档案解析失败"); return 0; }
+    const char *nm = json_str(json_get(pj, "name"), NULL);
+    const char *uid = json_str(json_get(pj, "id"), NULL);
+    if (!nm || !uid) {
+        json_free(pj);
+        if (err) snprintf(err, errcap, "该账号未拥有 Minecraft Java 版");
+        return 0;
+    }
+    char name[64], uuid[40];
+    snprintf(name, sizeof(name), "%s", nm);
+    snprintf(uuid, sizeof(uuid), "%s", uid);
+    json_free(pj);
+
+    auth_succeed(name, uuid, mc_tok, xuid_s);
+    app_log("[登录] 令牌已刷新：%s", name);
+    return 1;
+}
+
 void auth_start(void) {
     if (g.auth.polling) return;
     if (g.auth.state == AUTH_WAIT) return;
@@ -334,6 +481,7 @@ void auth_save(void) {
     sb_printf(&b, "uuid=%s\n", g.auth.uuid);
     sb_printf(&b, "token=%s\n", g.auth.token);
     sb_printf(&b, "xuid=%s\n", g.auth.xuid);
+    sb_printf(&b, "refresh=%s\n", g.auth.refresh);
     lz_file_write(p, b.s ? b.s : "", b.n);
     sb_free(&b);
 }
@@ -352,6 +500,7 @@ void auth_load(void) {
         if (!strcmp(k, "name")) snprintf(g.auth.name, sizeof(g.auth.name), "%s", v);
         else if (!strcmp(k, "uuid")) snprintf(g.auth.uuid, sizeof(g.auth.uuid), "%s", v);
         else if (!strcmp(k, "token")) snprintf(g.auth.token, sizeof(g.auth.token), "%s", v);
+        else if (!strcmp(k, "refresh")) snprintf(g.auth.refresh, sizeof(g.auth.refresh), "%s", v);
         else if (!strcmp(k, "xuid")) snprintf(g.auth.xuid, sizeof(g.auth.xuid), "%s", v);
     }
     free(txt);

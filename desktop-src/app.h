@@ -182,6 +182,7 @@ int  java_ensure(const char *version_id, char *out, size_t cap);
 
 /* ---- auth.c ---- */
 void auth_start(void);
+int         auth_refresh_blocking(char *err, size_t errcap);
 void auth_cancel(void);
 void auth_logout(void);
 void auth_save(void);

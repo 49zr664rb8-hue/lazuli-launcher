@@ -1329,6 +1329,22 @@ static DWORD WINAPI launch_thread(LPVOID p) {
         if (bad > 0) app_toast("已清理 %d 个损坏的模组文件", bad);
     }
 
+    /* 微软令牌只有 24 小时有效期，启动前刷新一次。
+       否则过期后游戏里会提示「无效的会话 ID」，联机也用不了。 */
+    if (g.auth.refresh[0]) {
+        EnterCriticalSection(&g_lock);
+        snprintf(g.status, sizeof(g.status), "正在刷新登录令牌…");
+        LeaveCriticalSection(&g_lock);
+        ui_request_redraw();
+        char rerr[240] = {0};
+        if (auth_refresh_blocking(rerr, sizeof(rerr))) {
+            app_log("[启动] 令牌刷新成功");
+        } else {
+            app_log("[启动] 令牌刷新失败：%s", rerr);
+            app_toast("令牌刷新失败：%s（联机可能受影响）", rerr);
+        }
+    }
+
     /* 统一走 java_ensure：它会挑 major 正好匹配的运行时。
        以前这里只判断 have < need，Java 25 跑 1.19.2 会被放行，
        Forge 的 Mixin 处理不了 Java 25 字节码，游戏静默崩溃、没有任何报错。 */

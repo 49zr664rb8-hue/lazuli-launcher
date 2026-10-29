@@ -19,6 +19,11 @@ Windows 版直接下载：[`dist/LazuliLauncher.exe`](dist/LazuliLauncher.exe)�
 
 ## 更新日志
 
+### v1.1.1
+
+- 启动前自动用 refresh_token 刷新微软令牌（令牌只有 24 小时，过期会提示「无效的会话 ID」）
+- 登录时保存 refresh_token，之后启动不再需要重新登录
+
 ### v1.1.0
 
 **新功能**
