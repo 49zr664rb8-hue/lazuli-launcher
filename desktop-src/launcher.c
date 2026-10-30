@@ -451,8 +451,12 @@ static int install_impl(const char *id, char *err, size_t errcap) {
             maven_path(lname, "jar", rel, sizeof(rel));
             char full[MAX_PATH * 2];
             lz_path_join(full, sizeof(full), libs, rel);
+            /* 库自己带了 url 就用它（Fabric / Forge 的 maven 仓库），
+               否则才回落到 Mojang 的 libraries CDN */
+            const char *lurl = json_str(json_get(lib, "url"), NULL);
             char url[600];
-            snprintf(url, sizeof(url), "%s%s", LIB_BASE, rel);
+            snprintf(url, sizeof(url), "%s%s",
+                     (lurl && lurl[0]) ? lurl : LIB_BASE, rel);
             fq_add(q, url, full);
         }
 

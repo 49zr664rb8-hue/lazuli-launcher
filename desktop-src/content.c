@@ -84,6 +84,35 @@ static int cf_class(int kind) {
     }
 }
 
+/* 把 slug / 标题跟搜索词完全一致的那条提到第一位。
+   Modrinth 按相关度排，附加包经常压过主包（比如搜 Create 先出 Create 的附属）。 */
+static void norm_key(const char *in, char *out, size_t cap) {
+    size_t k = 0;
+    for (const char *p = in; *p && k + 1 < cap; p++) {
+        if (*p == ' ' || *p == '-' || *p == '_') continue;
+        out[k++] = (char)((*p >= 'A' && *p <= 'Z') ? *p + 32 : *p);
+    }
+    out[k] = 0;
+}
+
+static void promote_exact(ContentItem *arr, int n, const char *q) {
+    if (!q || !q[0] || n < 2) return;
+    char nq[160];
+    norm_key(q, nq, sizeof(nq));
+    if (!nq[0]) return;
+    for (int i = 1; i < n; i++) {
+        char ns[160], nt[160];
+        norm_key(arr[i].id, ns, sizeof(ns));
+        norm_key(arr[i].title, nt, sizeof(nt));
+        if (!strcmp(ns, nq) || !strcmp(nt, nq)) {
+            ContentItem tmp = arr[i];
+            memmove(&arr[1], &arr[0], sizeof(ContentItem) * (size_t)i);
+            arr[0] = tmp;
+            return;
+        }
+    }
+}
+
 static const char *mr_type(int kind) {
     switch (kind) {
         case 2: return "shader";
@@ -273,6 +302,7 @@ static DWORD WINAPI search_thread(LPVOID p) {
             ci->downloads = (long long)json_num(json_get(h, "downloadCount"), 0);
         }
     }
+    if (sa->src == 0) promote_exact(g.content, n, sa->q);
     g.ncontent = n;
     g.content_state = 2;
     g.content_err[0] = 0;
@@ -374,6 +404,7 @@ static void md_fill_versions(JVal *arr) {
         }
         g_md.nvers++;
     }
+
 }
 
 typedef struct { char pid[96]; int idx; } MdArg;

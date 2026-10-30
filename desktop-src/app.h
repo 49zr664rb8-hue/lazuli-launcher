@@ -257,7 +257,7 @@ int         loader_version_id(int kind, const char *mcver, const char *lver, cha
 #define MAX_TASKS_DEF 48
 
 /* 模组详情 */
-#define MD_MAX_VERS 48
+#define MD_MAX_VERS 240
 #define MD_MAX_DEPS 12
 
 typedef struct {
