@@ -33,6 +33,41 @@ static const char *kind_dir(int kind) {
 /* 模组要装进「对应版本」的 mods 目录：
    先按模组声明的游戏版本 + 加载器去已安装版本里找，找不到就用最近启动的版本，
    再不行退回全局 mods 目录。 */
+/* 直接扫 versions 目录找匹配的版本文件夹。
+   不能只靠 g.versions —— 没打开过「我的版本」页时那个列表是空的，
+   结果模组就落到全局 mods 里，游戏（隔离模式）根本看不到。 */
+static int scan_disk_version(const char *game, const char *ld, char *out, size_t cap) {
+    char vd[MAX_PATH * 3], pat[MAX_PATH * 4];
+    lz_path_join(vd, sizeof(vd), g.set.game_dir, "versions");
+    snprintf(pat, sizeof(pat), "%s\\*", vd);
+    WIN32_FIND_DATAA fd;
+    HANDLE h = FindFirstFileA(pat, &fd);
+    if (h == INVALID_HANDLE_VALUE) return 0;
+    int found = 0;
+    do {
+        if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) continue;
+        if (fd.cFileName[0] == '.') continue;
+        if (game && game[0] && !strstr(fd.cFileName, game)) continue;
+        if (ld && ld[0]) {
+            if (strstr(ld, "neoforge") && !strstr(fd.cFileName, "neoforge")) continue;
+            if (strstr(ld, "fabric") && !strstr(fd.cFileName, "fabric")) continue;
+            if (strstr(ld, "quilt") && !strstr(fd.cFileName, "quilt")) continue;
+            if (!strstr(ld, "neoforge") && strstr(ld, "forge") &&
+                !strstr(fd.cFileName, "forge")) continue;
+        }
+        char jp[MAX_PATH * 5], jn[128];
+        snprintf(jn, sizeof(jn), "%s.json", fd.cFileName);
+        lz_path_join(jp, sizeof(jp), vd, fd.cFileName);
+        lz_path_join(jp, sizeof(jp), jp, jn);
+        if (!lz_file_exists(jp)) continue;
+        snprintf(out, cap, "%s", fd.cFileName);
+        found = 1;
+        break;
+    } while (FindNextFileA(h, &fd));
+    FindClose(h);
+    return found;
+}
+
 static void mod_target_dir(const MdVer *v, int kind, char *out, size_t cap) {
     char base[MAX_PATH * 3];
     lz_path_join(base, sizeof(base), g.set.game_dir, kind_dir(kind));
@@ -61,6 +96,9 @@ static void mod_target_dir(const MdVer *v, int kind, char *out, size_t cap) {
         pick = mv->id;
         break;
     }
+    char disk_pick[96];
+    if (!pick && scan_disk_version(want_game, want_ld, disk_pick, sizeof(disk_pick)))
+        pick = disk_pick;
     if (!pick && g.game.version[0]) pick = g.game.version;
     if (!pick && g.set.last_version[0]) pick = g.set.last_version;
 
