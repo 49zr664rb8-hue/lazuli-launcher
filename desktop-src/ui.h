@@ -49,6 +49,9 @@ typedef struct {
     int   focus_cap;
     double caret_t;
     float scroll[10];
+    float md_scroll;        /* 模组详情弹窗里版本列表的滚动 */
+    float md_scroll_max;
+    int   md_active;        /* 模组详情弹窗是否开着 */
     float scroll_max[10];
     int   page;
     int   anim;          /* 帧计数 */

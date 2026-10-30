@@ -29,7 +29,7 @@
 /* 应用信息 */
 #define LZ_NAME      "琉璃启动器"
 #define LZ_NAME_EN   "Lazuli Launcher"
-#define LZ_VERSION   "1.1.2"
+#define LZ_VERSION   "1.1.3"
 
 /* ==========================================================================
  *  字符串构建器

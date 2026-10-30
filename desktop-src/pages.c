@@ -1138,6 +1138,7 @@ static const char *md_chip_items[24];
 static int md_chip_n = 0;
 
 static void md_overlay(void) {
+    ui.md_active = 1;   /* 告诉渲染层滚轮归弹窗 */
     /* 前置解析完成后自动开下 */
     if (g_md.auto_dl && g_md.dep_state == 2) {
         g_md.auto_dl = 0;
@@ -1226,7 +1227,7 @@ static void md_overlay(void) {
     RcF list = Rc(c.x + 18, c.y + 218, c.w - 36, ch - 268);
     ui_fill_round(list, 14, LZ_ARGB(14, 255, 255, 255));
     ui_clip_push(list);
-    float ly = list.y + 4 - ui.scroll[PG_DL];
+    float ly = list.y + 4 - ui.md_scroll;
     int rows = 0;
     for (int i = 0; i < g_md.nvers; i++) {
         MdVer *v = &g_md.vers[i];
@@ -1269,6 +1270,18 @@ static void md_overlay(void) {
         ui_text(Rc(list.x, list.y + 20, list.w, 30), "这个版本没有对应文件，换个版本试试",
                 12.0f, 0, C_TEXT3, 1);
     ui_clip_pop();
+
+    /* 内容高度 → 滚动上限，并画一根滚动条 */
+    ui.md_scroll_max = LZ_MAX(0.0f, rows * 56.0f + 8.0f - list.h);
+    if (ui.md_scroll > ui.md_scroll_max) ui.md_scroll = ui.md_scroll_max;
+    if (ui.md_scroll_max > 1.0f) {
+        float frac = list.h / (list.h + ui.md_scroll_max);
+        float barh = LZ_MAX(40.0f, list.h * frac);
+        float t = ui.md_scroll / ui.md_scroll_max;
+        float by = list.y + (list.h - barh) * t;
+        ui_fill_round(Rc(list.x + list.w - 7, list.y + 2, 4, list.h - 4), 2, LZ_ARGB(16, 255, 255, 255));
+        ui_fill_round(Rc(list.x + list.w - 7, by, 4, barh), 2, LZ_ARGB(120, 255, 255, 255));
+    }
 
     if (g_md.dep_state == 1)
         ui_text(Rc(c.x + 26, c.y + ch - 32, c.w - 52, 20),
@@ -2068,6 +2081,8 @@ void pages_frame(float w, float h, int page) {
         /* 旧页整屏叠在上面淡出，新页自然浮现；同时轻微上移制造推进感 */
         ui_blend_prev(1.0f - ease, -(ease * 26.0f));
     }
+    if (g_md.active && !ui.md_active) ui.md_scroll = 0;   /* 每次打开从头开始 */
+    ui.md_active = g_md.active ? 1 : 0;
     if (g_md.active) md_overlay();
     if (vp_active) vp_overlay();
     auth_overlay();

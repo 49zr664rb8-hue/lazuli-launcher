@@ -729,6 +729,13 @@ void ui_mouse_wheel(float delta) {
         combo.scroll = LZ_CLAMP(combo.scroll, 0.0f, maxs);
         return;
     }
+    /* 模组详情弹窗开着时，滚轮只滚弹窗里的版本列表 */
+    if (ui.md_active) {
+        ui.md_scroll -= delta * 60.0f;
+        ui.md_scroll = LZ_CLAMP(ui.md_scroll, 0.0f, LZ_MAX(0.0f, ui.md_scroll_max));
+        return;
+    }
+
     int p = ui.page;
     ui.scroll[p] -= delta * 60.0f;
     float maxs = LZ_MAX(0.0f, ui.scroll_max[p]);
